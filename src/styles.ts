@@ -89,6 +89,9 @@ export const cardStyles = [robotStyles, css`
   .steps button:last-child { border-radius: 6px 12px 12px 6px; }
   .steps button.on { background: var(--sc-ctl); }
   .steps button:disabled { opacity: 0.5; cursor: default; }
+  /* Wert nur aus dem Verlauf (HA meldet unknown) → abgeschwächt */
+  .levels.stale .steps button.on { opacity: 0.5; }
+  .levels.stale b { font-weight: 500; color: var(--sc-text2); }
   .note { font-size: 12px; color: var(--sc-text2); padding: 0 2px; line-height: 16px; }
 
   /* ---------- Knöpfe ---------- */

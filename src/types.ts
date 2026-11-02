@@ -27,6 +27,7 @@ export interface HomeAssistant {
   entities?: Record<string, HassEntityReg>;
   devices?: Record<string, HassDevice>;
   callService(domain: string, service: string, data?: Record<string, unknown>): Promise<unknown>;
+  callWS?<T>(msg: Record<string, unknown>): Promise<T>;
   themes?: { darkMode?: boolean };
 }
 

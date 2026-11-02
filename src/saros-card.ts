@@ -47,6 +47,7 @@ export class SarosCard extends LitElement {
     _menu: { state: true },
     _confirm: { state: true },
     _pending: { state: true },
+    _lastMop: { state: true },
   };
 
   static styles = cardStyles;
@@ -63,6 +64,9 @@ export class SarosCard extends LitElement {
   private _lastVac?: string;
   private _pausedFrom?: string;
   private _pausedForPrep = false;
+  /** letzter bekannter Wasserfluss (aus dem Verlauf), solange HA unknown meldet */
+  private _lastMop?: string;
+  private _lastMopFor?: string;
 
   setConfig(config: SarosConfig): void {
     if (!config?.entity?.startsWith("vacuum.")) throw new Error("`entity:` fehlt (vacuum.*, z. B. vacuum.saros_20_flow_complete_2)");
@@ -117,6 +121,26 @@ export class SarosCard extends LitElement {
     if (v === "paused" && this.val("prep") === PREP.done) this._pausedForPrep = true;
     if (v !== "paused") this._pausedForPrep = false;
     this._lastVac = v;
+    this.fetchLastMop();
+  }
+
+  /**
+   * Wasserfluss: die Integration kennt nicht alle Wasser-Codes des Saros und meldet dann unknown →
+   * letzten bekannten Wert aus dem HA-Verlauf holen (einmal je unknown-Phase, auch direkt beim Öffnen der Karte)
+   */
+  private fetchLastMop(): void {
+    const ent = this.st("mop_intensity");
+    if (!ent || ent.state !== "unknown" || !this.hass?.callWS || this._lastMopFor === ent.last_changed) return;
+    this._lastMopFor = ent.last_changed;
+    const opts: string[] = ent.attributes.options ?? [];
+    const end = ent.last_changed || new Date().toISOString();
+    this.hass.callWS<Record<string, { s: string }[]>>({
+      type: "history/history_during_period", entity_ids: [ent.entity_id], minimal_response: true, no_attributes: true,
+      start_time: new Date(Date.parse(end) - 10 * 86_400_000).toISOString(), end_time: end,
+    }).then((r) => {
+      // „Aus“ überspringen: Wasserfluss wird nur in Wisch-Modi gezeigt
+      this._lastMop = (r[ent.entity_id] ?? []).map((x) => x.s).reverse().find((s) => s !== "off" && opts.includes(s));
+    }).catch(() => undefined);
   }
 
   disconnectedCallback(): void {
@@ -159,7 +183,12 @@ export class SarosCard extends LitElement {
   }
 
   private shown(k: string): string | undefined {
-    return this._pending[k] ?? this.current(k);
+    return this._pending[k] ?? this.current(k) ?? (this.stale(k) ? this._lastMop : undefined);
+  }
+
+  /** angezeigter Wert stammt aus dem Verlauf (HA meldet gerade unknown) */
+  private stale(k: string): boolean {
+    return k === "mop_intensity" && !this._pending[k] && this.st(k)?.state === "unknown" && !!this._lastMop;
   }
 
   /** angezeigte Modi; „vac_then_mop“ = echte Option, falls die Integration sie liefert, sonst nur anzeigbar */
@@ -301,7 +330,7 @@ export class SarosCard extends LitElement {
 
   private pick(k: string, value: string): void {
     // Modus-Skript: auch den angezeigten Modus erneut setzen lassen — die Anzeige kann veraltet sein (in der App umgestellt)
-    if (k === "cleaning_mode" ? !this._config.mode_script && this.modeNow() === normMode(value) : this.shown(k) === value) return;
+    if (k === "cleaning_mode" ? !this._config.mode_script && this.modeNow() === normMode(value) : (this._pending[k] ?? this.current(k)) === value) return;
     this._pending = { ...this._pending, [k]: value };
     const script = k === "cleaning_mode" ? this._config.mode_script : undefined;
     // Gerät reagiert nicht → wieder den echten Zustand zeigen (Skript prüft und wiederholt selbst, braucht länger)
@@ -442,8 +471,9 @@ export class SarosCard extends LitElement {
     const levels = order.filter((l) => avail.includes(l));
     const cur = this.shown(k);
     const idx = levels.indexOf(cur ?? "");
-    return html`<div class="levels">
-      <div class="lv-head">${icon(ic)}<span>${title}</span><b>${cur ? label(names, cur) : "–"}</b></div>
+    const stale = this.stale(k);
+    return html`<div class="levels ${stale ? "stale" : ""}" title=${stale ? "Zuletzt bekannter Wert — Home Assistant meldet gerade keinen" : ""}>
+      <div class="lv-head">${icon(ic)}<span>${title}</span><b>${cur ? label(names, cur) : "–"}${stale ? html`<small> · zuletzt</small>` : nothing}</b></div>
       <div class="steps">${levels.map((l, i) => html`<button class=${i <= idx ? "on" : ""} ?disabled=${off}
         title=${label(names, l)} aria-label="${title} ${label(names, l)}" @click=${() => this.pick(k, l)}></button>`)}</div>
     </div>`;

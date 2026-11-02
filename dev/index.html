@@ -48,7 +48,7 @@
     const base = () => {
       mock.set(vac, "docked"); mock.set(st, "charging"); mock.set(`sensor.${B}batterie_2`, 100); mock.set(dry, 0);
       mock.set(sel, "vac_and_mop"); mock.set("input_select.saros_reinigungsmodus", "vac_and_mop");
-      mock.set(prep, "Bereit"); mock.set(back, "OK");
+      mock.set(prep, "Bereit"); mock.set(back, "OK"); mock.set(`select.${B}wisch_intensitat_2`, "medium");
       mock.set(`sensor.${B}staubsauger_fehler_2`, "none"); mock.set(`binary_sensor.${B}dock_schmutzwassertank_2`, "off");
       mock.set(`sensor.${B}verbleibende_sensorzeit_2`, 18.7); mock.set(`sensor.${B}verbleibende_filterzeit_2`, 144);
       mock.set(`sensor.${B}aktueller_raum_2`, "Küche"); mock.set(`sensor.${B}reinigungsfortschritt_2`, 42);
@@ -77,6 +77,7 @@
         "Tank voll": () => mock.set(`binary_sensor.${B}dock_schmutzwassertank_2`, "on"),
         "Wartung fällig": () => { mock.set(`sensor.${B}verbleibende_sensorzeit_2`, 1.5); mock.set(`sensor.${B}verbleibende_filterzeit_2`, 0); },
         "Offline": () => { mock.set(vac, "unavailable"); mock.set(st, "unavailable"); },
+        "Wasserfluss unknown": () => mock.set(`select.${B}wisch_intensitat_2`, "unknown"),
       },
       "Stockwerk vorbereiten": {
         "Gesperrt": () => mock.set(prep, "Gesperrt"),

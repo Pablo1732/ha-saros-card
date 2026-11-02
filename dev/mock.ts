@@ -69,6 +69,11 @@ function build() {
     entities,
     devices: { [R]: { id: R, name: "Saros 20 Flow Complete" }, [D]: { id: D, name: "Saros 20 Flow Complete Dock", via_device_id: R } },
     themes: { darkMode: !document.documentElement.classList.contains("light") },
+    // Verlauf nachgestellt: vor dem unknown stand der Wasserfluss auf „Hoch“
+    async callWS(msg: any): Promise<any> {
+      if (msg.type === "history/history_during_period") return { [msg.entity_ids[0]]: [{ s: "medium" }, { s: "high" }, { s: "unknown" }] };
+      return {};
+    },
     async callService(domain, service, data: any = {}) {
       console.log("callService", domain, service, data);
       const vac = `vacuum.${B}2`, st = `sensor.${B}status_2`;
