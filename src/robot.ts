@@ -109,6 +109,10 @@ export function robot(anim: Anim, station: "in" | "ghost" | "none") {
 export const robotStyles = css`
   /* hidden: Animationen (Heimfahrt, Bahnen) dürfen nicht über den Status-Text laufen */
   .robot { width: 100%; height: 100%; overflow: hidden; display: block; }
+  /* steht still in der Station: Bild mittig zwischen Chips und Status (unten wird der Platz nur für Trage-/Fahrt-
+     Animationen gebraucht); beim Tragen wieder hoch, sonst läuft die Hand aus dem Bild */
+  .robot { transition: transform 0.5s ease; }
+  .robot.st-in:not(.a-carry_in):not(.a-carry_out) { transform: translateY(9px); }
 
   /* Gerätefarben (echtes Aussehen), Zustandsfarbe kommt als --rb-accent von der Karte */
   .station { transition: opacity 0.5s; }

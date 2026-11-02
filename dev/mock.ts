@@ -36,6 +36,7 @@ const defs: Def[] = [
   [`sensor.${B}gesamtreinigungszeit_2`, 11.28, "total_cleaning_time", R],
   [`sensor.${B}letztes_reinigungsende_2`, "2026-10-24T11:38:44+00:00", "last_clean_end", R],
   [`sensor.${B}dock_verbleibende_zeit_zum_trocknen_des_mopps_2`, 0, "mop_drying_remaining_time", D],
+  ["script.saros_reinigungsmodus", "off", undefined, ""],
   ["input_select.saros_reinigungsmodus", "vac_and_mop", undefined, "", { options: ["vacuum", "vac_and_mop", "vac_then_mop"] }],
   ["input_select.saros_20_flow_complete_anderes_stockwerk_status", "OK", undefined, "", { options: ["OK", "Muss zur Station", "Kann zurück", "Station Läuft"] }],
   [`input_select.${B}auf_anderes_stockwerk_vorbereiten`, "Bereit", undefined, "", { options: ["Gesperrt", "Läuft", "Fertig", "Bereit", "Abbrechen", "Starten"] }],
@@ -92,10 +93,14 @@ function build() {
         later(700, () => mock.set(`select.${B}wisch_intensitat_2`, "off"));
         later(1100, () => { mock.set(vac, undefined, { fan_speed: fan }); mock.set(`select.${B}wisch_intensitat_2`, mop); });
       }
-      if (domain === "script") later(1500, () => {
-        mock.set(`select.${B}reinigungsmodus_2`, data.variables.modus === "vacuum" ? "vacuum" : "unknown");
-        mock.set("input_select.saros_reinigungsmodus", data.variables.modus);
-      });
+      // wie beim echten Saros: Select zeigt unterwegs vac_and_mop, dann unknown; Merker erst am Skript-Ende
+      if (domain === "script") {
+        const wet = data.variables.modus !== "vacuum";
+        mock.set(data.entity_id, "on");
+        later(400, () => mock.set(`select.${B}reinigungsmodus_2`, wet ? "vac_and_mop" : "vacuum"));
+        later(1000, () => wet && mock.set(`select.${B}reinigungsmodus_2`, "unknown"));
+        later(2500, () => { mock.set("input_select.saros_reinigungsmodus", data.variables.modus); mock.set(data.entity_id, "off"); });
+      }
       // Automation nachgestellt: Starten → Läuft → Fertig, Abbrechen → Bereit
       const prep = `input_select.${B}auf_anderes_stockwerk_vorbereiten`;
       if (data.entity_id === prep && data.option === "Starten") later(1200, () => mock.set(prep, "Läuft"));

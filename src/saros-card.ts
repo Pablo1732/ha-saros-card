@@ -70,6 +70,8 @@ export class SarosCard extends LitElement {
   private _freeze: Record<string, string | undefined> = {};
   private _freezeTimer?: number;
   private _freezeSig?: string;
+  private _pendingAt: Record<string, number> = {};
+  private _staleTimer?: number;
   private _lastVac?: string;
   private _pausedFrom?: string;
   private _pausedForPrep = false;
@@ -119,7 +121,9 @@ export class SarosCard extends LitElement {
       // Modus über kind() vergleichen: beide Wisch-Modi sehen in HA gleich aus, erst der Merker entscheidet
       const ok = k === "cleaning_mode" ? this.kind(this.current(k)) === normMode(v) : this.current(k) === v;
       if (k === "cleaning_mode") {
-        if (ok) this.dropPending(k);
+        // mit Modus-Skript erst nach dessen Ende: unterwegs meldet HA Zwischenstände (vacuum → vac_and_mop → unknown),
+        // der Merker kommt zuletzt — sonst springt die Anzeige kurz auf einen falschen Modus
+        if (ok && !this.scriptBusy() && Date.now() - (this._pendingAt[k] ?? 0) > 1000) this.dropPending(k);
       } else if (!ok) {
         // springt wieder weg → weiter warten
         clearTimeout(this._settleTimers[k]);
@@ -136,7 +140,14 @@ export class SarosCard extends LitElement {
     if (v === "paused" && this.val("prep") === PREP.done) this._pausedForPrep = true;
     if (v !== "paused") this._pausedForPrep = false;
     this._lastVac = v;
+    // Wasserfluss: letzten echten Wert merken (Integration flackert zwischen Wert und unknown)
+    const m = this.current("mop_intensity");
+    if (m && m !== "off" && (this.st("mop_intensity")?.attributes.options ?? []).includes(m)) this._lastMop = m;
     this.fetchLastMop();
+  }
+
+  private scriptBusy(): boolean {
+    return !!this._config.mode_script && this.hass?.states[this._config.mode_script]?.state === "on";
   }
 
   /**
@@ -159,20 +170,20 @@ export class SarosCard extends LitElement {
    */
   private watchFreeze(): void {
     if (!Object.keys(this._freeze).length) return;
-    const script = this._config.mode_script ? this.hass?.states[this._config.mode_script]?.state : undefined;
-    const busy = "cleaning_mode" in this._pending || script === "on";
+    const busy = "cleaning_mode" in this._pending || this.scriptBusy();
     const sig = `${this.current("fan")}|${this.current("mop_intensity")}`;
     if (busy || sig !== this._freezeSig) {
       this._freezeSig = sig;
       clearTimeout(this._freezeTimer);
       this._freezeTimer = undefined;
     }
-    if (!busy && !this._freezeTimer) this._freezeTimer = window.setTimeout(() => (this._freeze = {}), 3000);
+    if (!busy && !this._freezeTimer) this._freezeTimer = window.setTimeout(() => (this._freeze = {}), 4000);
   }
 
   private fetchLastMop(): void {
     const ent = this.st("mop_intensity");
-    if (!ent || ent.state !== "unknown" || !this.hass?.callWS || this._lastMopFor === ent.last_changed) return;
+    // nur nötig, wenn seit dem Öffnen noch kein echter Wert kam
+    if (!ent || ent.state !== "unknown" || this._lastMop || !this.hass?.callWS || this._lastMopFor === ent.last_changed) return;
     this._lastMopFor = ent.last_changed;
     const opts: string[] = ent.attributes.options ?? [];
     const end = ent.last_changed || new Date().toISOString();
@@ -232,6 +243,18 @@ export class SarosCard extends LitElement {
   /** angezeigter Wert stammt aus dem Verlauf (HA meldet gerade unknown) */
   private stale(k: string): boolean {
     return k === "mop_intensity" && !this._pending[k] && this._freeze[k] == null && this.st(k)?.state === "unknown" && !!this._lastMop;
+  }
+
+  /** „· zuletzt“ erst zeigen, wenn unknown länger als 10 s anhält — kurzes Flackern der Integration nicht markieren */
+  private staleLong(k: string): boolean {
+    if (!this.stale(k)) return false;
+    const age = Date.now() - Date.parse(this.st(k)?.last_changed ?? "");
+    if (!(age > 10_000)) {
+      clearTimeout(this._staleTimer);
+      this._staleTimer = window.setTimeout(() => this.requestUpdate(), Math.max(0, 10_000 - (age || 0)) + 100);
+      return false;
+    }
+    return true;
   }
 
   /** angezeigte Modi; „vac_then_mop“ = echte Option, falls die Integration sie liefert, sonst nur anzeigbar */
@@ -386,6 +409,7 @@ export class SarosCard extends LitElement {
     this._retried.delete(k);
     this.dropPending(k);
     this._pending = { ...this._pending, [k]: value };
+    this._pendingAt[k] = Date.now();
     this.send(k, value);
     this.armPendingTimer();
   }
@@ -550,7 +574,7 @@ export class SarosCard extends LitElement {
     const levels = order.filter((l) => avail.includes(l));
     const cur = this.shown(k);
     const idx = levels.indexOf(cur ?? "");
-    const stale = this.stale(k);
+    const stale = this.staleLong(k);
     return html`<div class="levels ${stale ? "stale" : ""}" title=${stale ? "Zuletzt bekannter Wert — Home Assistant meldet gerade keinen" : ""}>
       <div class="lv-head">${icon(ic)}<span>${title}</span><b>${cur ? label(names, cur) : "–"}${stale ? html`<small> · zuletzt</small>` : nothing}</b></div>
       <div class="steps">${levels.map((l, i) => html`<button class=${i <= idx ? "on" : ""} ?disabled=${off}
