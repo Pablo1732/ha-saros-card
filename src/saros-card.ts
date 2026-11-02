@@ -23,6 +23,8 @@ const normMode = (m: string): string => (THEN_ALIASES.includes(m) ? "vac_then_mo
 const DEFAULT_MODES = ["vacuum", "vac_and_mop", "vac_then_mop"];
 
 const WARN = "var(--warning-color, #ffa600)";
+/** so lange muss ein neuer Modus-/Stärkewert stabil sein, bevor die Karte ihn zeigt */
+const CALM_MS = 2500;
 /** Farbe je Animation: HA-Zustandsfarben für Saugroboter bzw. HA-Statusfarben (folgen dem Theme) */
 const ACTIVE = "var(--state-vacuum-active-color, var(--teal-color, #009688))";
 const ACCENT: Record<Anim, string> = {
@@ -48,7 +50,6 @@ export class SarosCard extends LitElement {
     _confirm: { state: true },
     _pending: { state: true },
     _lastMop: { state: true },
-    _freeze: { state: true },
   };
 
   static styles = cardStyles;
@@ -66,10 +67,14 @@ export class SarosCard extends LitElement {
   private _retried = new Set<string>();
   /** Bestätigung gilt erst, wenn der Wert kurz stabil bleibt (Integration springt sonst zurück) */
   private _settleTimers: Record<string, number> = {};
-  /** Stärken während eines Moduswechsels einfrieren, bis sich Gerät/Integration beruhigt haben */
-  private _freeze: Record<string, string | undefined> = {};
-  private _freezeTimer?: number;
-  private _freezeSig?: string;
+  /**
+   * ruhige Anzeige auf jedem Gerät: Modus und Stärken springen in HA beim Umstellen (auch von einem anderen Gerät
+   * oder nach dem Aufwachen der App) mehrmals hin und her → neuer Wert erst, wenn er CALM_MS stabil ist
+   * und das Modus-Skript nicht mehr läuft
+   */
+  private _calm: Record<string, string | undefined> = {};
+  private _cand: Record<string, { v: string | undefined; at: number }> = {};
+  private _calmTimer?: number;
   private _pendingAt: Record<string, number> = {};
   private _staleTimer?: number;
   private _lastVac?: string;
@@ -107,7 +112,7 @@ export class SarosCard extends LitElement {
     const old = changed.get("hass") as HomeAssistant | undefined;
     if (!old || !this.hass || !this._config) return true;
     if (old.themes?.darkMode !== this.hass.themes?.darkMode || old.entities !== this.hass.entities) return true;
-    return [this._config.entity, this._config.floor_prep, this._config.floor_back, this._config.mode_helper, ...Object.values(this._e)].some((id) => id && old.states[id] !== this.hass!.states[id]);
+    return [this._config.entity, this._config.floor_prep, this._config.floor_back, this._config.mode_helper, this._config.mode_script, ...Object.values(this._e)].some((id) => id && old.states[id] !== this.hass!.states[id]);
   }
 
   protected willUpdate(): void {
@@ -132,7 +137,6 @@ export class SarosCard extends LitElement {
         this._settleTimers[k] = window.setTimeout(() => this.dropPending(k), 2500);
       }
     }
-    this.watchFreeze();
     // merken, woraus die Pause kam: Heimfahrt → „Fortsetzen“ fährt weiter heim; Pause der Stockwerk-Vorbereitung → nachfragen
     const v = this.st("vacuum")?.state;
     if (v !== "paused") this._pausedFrom = undefined;
@@ -144,42 +148,53 @@ export class SarosCard extends LitElement {
     const m = this.current("mop_intensity");
     if (m && m !== "off" && (this.st("mop_intensity")?.attributes.options ?? []).includes(m)) this._lastMop = m;
     this.fetchLastMop();
+    this.calm();
   }
 
   private scriptBusy(): boolean {
     return !!this._config.mode_script && this.hass?.states[this._config.mode_script]?.state === "on";
   }
 
-  /**
-   * Wasserfluss: die Integration kennt nicht alle Wasser-Codes des Saros und meldet dann unknown →
-   * letzten bekannten Wert aus dem HA-Verlauf holen (einmal je unknown-Phase, auch direkt beim Öffnen der Karte)
-   */
   private dropPending(k: string): void {
     clearTimeout(this._settleTimers[k]);
     delete this._settleTimers[k];
     this._retried.delete(k);
     if (!(k in this._pending)) return;
+    // bestätigt → gleich als ruhigen Wert übernehmen, sonst zeigt die Karte kurz noch den alten
+    const v = k === "cleaning_mode" ? normMode(this._pending[k]) : this._pending[k];
+    this._calm[k] = v;
+    this._cand[k] = { v, at: Date.now() };
     const rest = { ...this._pending };
     delete rest[k];
     this._pending = rest;
   }
 
-  /**
-   * Moduswechsel: Saugstärke/Wasserfluss springen in HA ein paar Mal hin und her (Gerät setzt Standardwerte,
-   * Skript stellt zurück) → Anzeige bleibt beim alten Wert, bis Skript/Wechsel fertig und die Werte 3 s ruhig sind
-   */
-  private watchFreeze(): void {
-    if (!Object.keys(this._freeze).length) return;
-    const busy = "cleaning_mode" in this._pending || this.scriptBusy();
-    const sig = `${this.current("fan")}|${this.current("mop_intensity")}`;
-    if (busy || sig !== this._freezeSig) {
-      this._freezeSig = sig;
-      clearTimeout(this._freezeTimer);
-      this._freezeTimer = undefined;
+  /** ruhige Werte nachführen (siehe _calm); erster Wert sofort, danach nur stabile Änderungen */
+  private calm(): void {
+    const now = Date.now();
+    const busy = this.scriptBusy();
+    const mop = this.current("mop_intensity") ?? (this.st("mop_intensity")?.state === "unknown" ? this._lastMop : undefined);
+    const raw: Record<string, string | undefined> = { cleaning_mode: this.kind(this.current("cleaning_mode")), fan: this.current("fan"), mop_intensity: mop };
+    let next = Infinity;
+    for (const [k, v] of Object.entries(raw)) {
+      if (this._cand[k]?.v !== v) this._cand[k] = { v, at: now };
+      if (this._calm[k] === undefined || this._calm[k] === v) {
+        this._calm[k] = v;
+        continue;
+      }
+      const due = this._cand[k].at + CALM_MS;
+      if (busy) continue; // Skript-Ende löst ohnehin ein Update aus
+      if (now >= due) this._calm[k] = v;
+      else next = Math.min(next, due);
     }
-    if (!busy && !this._freezeTimer) this._freezeTimer = window.setTimeout(() => (this._freeze = {}), 4000);
+    clearTimeout(this._calmTimer);
+    if (next < Infinity) this._calmTimer = window.setTimeout(() => this.requestUpdate(), next - now + 50);
   }
 
+  /**
+   * Wasserfluss: die Integration kennt nicht alle Wasser-Codes des Saros und meldet dann unknown →
+   * letzten bekannten Wert aus dem HA-Verlauf holen (einmal je unknown-Phase, auch direkt beim Öffnen der Karte)
+   */
   private fetchLastMop(): void {
     const ent = this.st("mop_intensity");
     // nur nötig, wenn seit dem Öffnen noch kein echter Wert kam
@@ -236,13 +251,12 @@ export class SarosCard extends LitElement {
   }
 
   private shown(k: string): string | undefined {
-    if (k in this._freeze && this._freeze[k] != null && !(k in this._pending)) return this._freeze[k];
-    return this._pending[k] ?? this.current(k) ?? (this.stale(k) ? this._lastMop : undefined);
+    return this._pending[k] ?? (k in this._calm ? this._calm[k] : this.current(k));
   }
 
   /** angezeigter Wert stammt aus dem Verlauf (HA meldet gerade unknown) */
   private stale(k: string): boolean {
-    return k === "mop_intensity" && !this._pending[k] && this._freeze[k] == null && this.st(k)?.state === "unknown" && !!this._lastMop;
+    return k === "mop_intensity" && !this._pending[k] && this.st(k)?.state === "unknown" && !!this._lastMop && this._calm[k] === this._lastMop;
   }
 
   /** „· zuletzt“ erst zeigen, wenn unknown länger als 10 s anhält — kurzes Flackern der Integration nicht markieren */
@@ -269,7 +283,7 @@ export class SarosCard extends LitElement {
   /** angezeigter Modus: gerade gewählter (noch unbestätigter) Modus, sonst der aktive */
   private modeNow(): string | undefined {
     const p = this._pending.cleaning_mode;
-    return p ? normMode(p) : this.kind(this.current("cleaning_mode"));
+    return p ? normMode(p) : "cleaning_mode" in this._calm ? this._calm.cleaning_mode : this.kind(this.current("cleaning_mode"));
   }
 
   /**
@@ -341,7 +355,7 @@ export class SarosCard extends LitElement {
     if (this.val("back") === BACK.running && !["emptying_the_bin", "washing_the_mop", "drying"].includes(s ?? "")) return "Station arbeitet";
     if (s === "charging" && (this.numVal("battery") ?? 0) >= 100) return "Voll geladen";
     if (s === "cleaning" || (!s && v === "cleaning")) {
-      const m = this.kind(this.current("cleaning_mode"));
+      const m = this.modeNow();
       return m === "vacuum" ? "Saugt" : m === "mop" ? "Wischt" : m === "vac_and_mop" ? "Saugt & wischt"
         : m === "vac_then_mop" ? "Saugt, dann wischt" : "Reinigt";
     }
@@ -397,15 +411,6 @@ export class SarosCard extends LitElement {
   private pick(k: string, value: string): void {
     // Modus-Skript: auch den angezeigten Modus erneut setzen lassen — die Anzeige kann veraltet sein (in der App umgestellt)
     if (k === "cleaning_mode" ? !this._config.mode_script && this.modeNow() === normMode(value) : (this._pending[k] ?? this.current(k)) === value) return;
-    if (k === "cleaning_mode") {
-      this._freeze = { fan: this.shown("fan"), mop_intensity: this.shown("mop_intensity") };
-      this._freezeSig = undefined;
-    } else {
-      // eigene Auswahl hat Vorrang vor dem eingefrorenen Wert
-      const rest = { ...this._freeze };
-      delete rest[k];
-      this._freeze = rest;
-    }
     this._retried.delete(k);
     this.dropPending(k);
     this._pending = { ...this._pending, [k]: value };
