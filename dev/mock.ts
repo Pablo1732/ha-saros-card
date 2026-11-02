@@ -85,6 +85,13 @@ function build() {
       if (domain === "vacuum" && service === "return_to_base") later(500, () => { mock.set(vac, "returning"); mock.set(st, "returning_home"); });
       // Modus-Skript nachgestellt: „Saugen, dann Wischen“ meldet HA als unknown
       // wie beim echten Saros: beide Wisch-Modi meldet HA als unknown, der Merker unterscheidet sie
+      // wie beim echten Gerät: Stärken springen während des Wechsels kurz auf Standardwerte und zurück
+      if (domain === "script") {
+        const fan = states[vac].attributes.fan_speed, mop = states[`select.${B}wisch_intensitat_2`].state;
+        later(300, () => { mock.set(vac, undefined, { fan_speed: "balanced" }); mock.set(`select.${B}wisch_intensitat_2`, "unknown"); });
+        later(700, () => mock.set(`select.${B}wisch_intensitat_2`, "off"));
+        later(1100, () => { mock.set(vac, undefined, { fan_speed: fan }); mock.set(`select.${B}wisch_intensitat_2`, mop); });
+      }
       if (domain === "script") later(1500, () => {
         mock.set(`select.${B}reinigungsmodus_2`, data.variables.modus === "vacuum" ? "vacuum" : "unknown");
         mock.set("input_select.saros_reinigungsmodus", data.variables.modus);

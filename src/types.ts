@@ -46,6 +46,8 @@ export interface SarosConfig {
   modes?: string[];
   /** false = keine Animationen */
   animations?: boolean;
+  /** „Zuletzt gereinigt vor …“ unter dem Status zeigen (Standard true) */
+  show_last_clean?: boolean;
   /** Skript, das den Reinigungsmodus setzt und prüft (ha/saros-reinigungsmodus.yaml); macht „Saugen, dann Wischen“ antippbar */
   mode_script?: string;
   /** input_select, in den das Modus-Skript den gesetzten Modus schreibt; unterscheidet die Wisch-Modi, die HA beide als unknown meldet */

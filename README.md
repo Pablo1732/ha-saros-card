@@ -48,6 +48,7 @@ floor_back: input_select.saros_20_flow_complete_anderes_stockwerk_status
 | `mode_helper` | nein | Merker-Dropdown des Skripts; damit zeigt die Karte die Wisch-Modi richtig an |
 | `maintenance_warn` | nein | Wartung ab so viel % Restlaufzeit melden (Standard `10`) |
 | `animations` | nein | `false` = keine Animationen |
+| `show_last_clean` | nein | `false` = „Zuletzt gereinigt vor …“ ausblenden (z. B. wenn die Integration falsche Zeiten meldet) |
 | `entities` | nein | Entitäten von Hand zuordnen, falls die Erkennung nicht passt, z. B. `entities: { status: sensor.xyz }` |
 
 Schlüssel für `entities` = `translation_key` der Roborock-Entität (z. B. `status`, `vacuum_error`, `dock_error`, `cleaning_mode`, `mop_intensity`, `main_brush_time_left`, `reset_main_brush_consumable`), dazu `battery` und `charging`.

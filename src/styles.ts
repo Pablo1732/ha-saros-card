@@ -134,7 +134,10 @@ export const cardStyles = [robotStyles, css`
   dialog.dlg::backdrop { background: rgba(0, 0, 0, 0.5); }
   /* nur der Inhalt scrollt, Kopf bleibt stehen; schmale Scrollleiste mit Abstand zu den runden Ecken */
   .dlg-in { background: var(--ha-card-background, var(--card-background-color, #fff)); border-radius: var(--ha-dialog-border-radius, 24px);
-    max-height: calc(100vh - 48px); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;
+    max-height: calc(100vh - 48px);
+    /* iPhone: nicht unter Statusleiste/Home-Balken, dvh = wirklich sichtbare Höhe */
+    max-height: calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); padding-top: 20px; }
   .dlg-in.pad { padding: 20px; }
   .dlg-body { overflow-y: auto; padding: 0 14px 20px 20px; margin: 0 6px 12px 0;
