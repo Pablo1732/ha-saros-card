@@ -26,15 +26,28 @@ Dashboard-Karte für Roborock-Saugroboter (gebaut für den Saros 20 Flow Complet
 3. Karte aufs Dashboard (am besten volle Breite)
 
 ## Einrichtung
-- **Reset-Tasten:** Roborock legt sie deaktiviert an. Einstellungen → Geräte → Saros 20 → Entitäten → die fünf „… zurücksetzen“-Tasten aktivieren. Ohne sie ist der Reset-Knopf im Menü ausgegraut.
+Nur `entity:` ist Pflicht, alles andere schaltet Zusatzfunktionen frei.
+
+| Was | Datei | Wozu |
+|---|---|---|
+| Reset-Tasten aktivieren | – | Verschleißteile im Menü zurücksetzen |
+| Modus-Skript + Merker | [`ha/saros-reinigungsmodus.yaml`](ha/saros-reinigungsmodus.yaml), [`ha/helfer.yaml`](ha/helfer.yaml) | „Saugen, dann Wischen“ setzen und richtig anzeigen |
+| Dropdown „Stockwerk vorbereiten“ + eigene Automation | [`ha/helfer.yaml`](ha/helfer.yaml) | Knopf „Stockwerk vorbereiten“ |
+| Dropdown „Rückweg“ + eigene Automation | [`ha/helfer.yaml`](ha/helfer.yaml) | Hinweise/Animation zum Tragen in die Station |
+
+- **Reset-Tasten:** Roborock legt sie deaktiviert an. Einstellungen → Geräte → Saros 20 → Entitäten → die „… zurücksetzen“-Tasten aktivieren. Für den Schmutzfänger der Station bietet die Integration keine Taste → in der Roborock-App zurücksetzen.
+- **Helfer:** [`ha/helfer.yaml`](ha/helfer.yaml) als Paket einbinden oder die Dropdowns per UI anlegen (Optionen exakt übernehmen).
+- **Modus-Skript:** siehe [Modus-Skript](#modus-skript-saugen-dann-wischen).
 
 ## Konfiguration
 ```yaml
 type: custom:saros-card
 entity: vacuum.saros_20_flow_complete_2
 name: Saros
-floor_prep: input_select.saros_20_flow_complete_auf_anderes_stockwerk_vorbereiten
-floor_back: input_select.saros_20_flow_complete_anderes_stockwerk_status
+mode_script: script.saros_reinigungsmodus
+mode_helper: input_select.saros_reinigungsmodus
+floor_prep: input_select.saros_auf_anderes_stockwerk_vorbereiten
+floor_back: input_select.saros_anderes_stockwerk_status
 ```
 
 | Option | Pflicht | Bedeutung |
@@ -54,7 +67,10 @@ floor_back: input_select.saros_20_flow_complete_anderes_stockwerk_status
 Schlüssel für `entities` = `translation_key` der Roborock-Entität (z. B. `status`, `vacuum_error`, `dock_error`, `cleaning_mode`, `mop_intensity`, `main_brush_time_left`, `reset_main_brush_consumable`), dazu `battery` und `charging`.
 
 ### Stockwerk vorbereiten
-Die Karte stellt nur das `input_select`, den Ablauf macht deine Automation.
+Die Karte stellt nur das `input_select`, den Ablauf macht deine Automation:
+- `Starten` → auf `Läuft` stellen, Roboter vorbereiten (z. B. leeren/waschen), danach `Fertig`
+- `Abbrechen` → Ablauf stoppen, zurück auf `Bereit`
+- `Gesperrt` = gerade nicht möglich (z. B. während einer Reinigung)
 
 | Wert | Karte zeigt | Antippen |
 |---|---|---|
@@ -68,7 +84,10 @@ Die Karte stellt nur das `input_select`, den Ablauf macht deine Automation.
 - Pausiert die Vorbereitung den Roboter, fragt „Fortsetzen“ nach (er könnte schon im anderen Stockwerk stehen).
 
 ### Rückweg zur Station
-Steht der Roboter im anderen Stockwerk, kann er nicht selbst zur Station. Die Karte zeigt nur an, den Ablauf macht deine Automation.
+Steht der Roboter im anderen Stockwerk, kann er nicht selbst zur Station. Die Karte zeigt nur an, den Ablauf macht deine Automation:
+- Reinigung im anderen Stockwerk fertig → `Muss zur Station`
+- Roboter steht in der Station → `Station Läuft`, Station leeren/waschen lassen
+- fertig → `Kann zurück`; Roboter wieder losgefahren → `OK`
 
 | Wert | Karte zeigt |
 |---|---|
@@ -84,9 +103,11 @@ Steht der Roboter im anderen Stockwerk, kann er nicht selbst zur Station. Die Ka
 Die Roborock-Integration kann diesen Modus nicht setzen. [`ha/saros-reinigungsmodus.yaml`](ha/saros-reinigungsmodus.yaml) schickt dafür den Befehl der Roborock-App (`app_set_clean_sequence_type`) und prüft das Ergebnis.
 - Ablauf: Befehl senden → Saug-/Wischstärke wiederherstellen → bis 15 s auf Bestätigung warten → 1× wiederholen → sonst HA-Benachrichtigung
 - Einrichten: HA → Skripte → Neu → ⋮ → In YAML bearbeiten → Datei einfügen, speichern; Entitäten unter `variables` anpassen; in der Karte `mode_script: script.<ID>`
-- Merker: Helfer → Dropdown `input_select.saros_reinigungsmodus` mit Optionen `vacuum`, `vac_and_mop`, `vac_then_mop`; in der Karte `mode_helper:`
+- Merker: Dropdown `input_select.saros_reinigungsmodus` aus [`ha/helfer.yaml`](ha/helfer.yaml); in der Karte `mode_helper:`
+- Umstellen in der Roborock-App: Wechsel zwischen Saugen und einem Wisch-Modus erkennt die Karte, welcher der beiden Wisch-Modi es ist aber nicht (der Merker bleibt beim letzten Wert aus der Karte)
 - Grenze: Der Roboter meldet die Reihenfolge (gleichzeitig / erst saugen) gar nicht mit, HA sieht nur „Wischen an“ (je nach HA-Version `vac_and_mop` oder `unknown`). Sicher prüfbar ist nur Wischen an/aus; welcher der beiden Wisch-Modi aktiv ist, weiß nur der Merker (falsch, wenn danach in der App umgestellt wurde)
 - Tippen auf den schon aktiven Modus setzt ihn erneut — für den Fall, dass in der App umgestellt wurde und die Anzeige veraltet ist
+- Unterstützt HA den Saros später vollständig (Option „Saugen, dann Wischen“ im Reinigungsmodus-Select): `mode_script`/`mode_helper` aus der Karte entfernen, Skript und Merker löschen — die Karte nutzt die echte Option automatisch
 - Auch in Automationen nutzbar: `action: script.saros_reinigungsmodus`, `data: { modus: vac_then_mop }`
 
 ### Wartung
@@ -103,7 +124,8 @@ Rot: Roboter-/Stationsfehler, Frischwasser leer/Wassermangel, Schmutzwasser voll
 ## FAQ
 - **„Saugen, dann Wischen“ lässt sich nicht antippen, nur ein Hinweis kommt:** Die Integration kann den Modus nicht setzen (HA meldet ihn als `unknown`, die Karte zeigt ihn dann als aktiv). Lösung: Modus-Skript einrichten (siehe oben) oder in der Roborock-App wählen. Offizielle Unterstützung: [python-roborock#914](https://github.com/Python-roborock/python-roborock/issues/914).
 - **Kein „Nur Wischen“:** gibt's beim Saros 20 Flow nicht; die HA-Option `mop` bewirkt dort nichts und ist deshalb ausgeblendet.
-- **Reset ausgegraut:** Reset-Tasten nicht aktiviert (siehe Einrichtung). Der Hinweis im Menü verschwindet, sobald alle aktiv sind.
+- **Reset ausgegraut:** Reset-Tasten nicht aktiviert (siehe Einrichtung). Schmutzfänger: hat in HA keine Taste, nur in der Roborock-App.
+- **Werte springen beim Umschalten:** Die Integration meldet beim Saros Zwischenstände. Die Karte zeigt neue Modus-/Stärkewerte erst, wenn sie 2,5 s stabil sind (Änderungen von anderen Geräten daher kurz verzögert); die eigene Auswahl sofort. Steht der Wasserfluss in HA auf `unknown`, zeigt die Karte den letzten bekannten Wert (nach 10 s mit „· zuletzt“).
 - **Änderungen nach Update nicht sichtbar?** Browser-Cache leeren; Version steht in der Browser-Konsole (`SAROS-CARD <Version> (<Build-Zeit>)`).
 
 ## Entwicklung

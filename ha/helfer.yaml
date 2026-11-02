@@ -1,0 +1,36 @@
+# Helfer (Dropdowns) für die Saros-Karte — alle optional, jeweils nur anlegen, was du nutzt.
+# - Als Paket: Datei nach /config/packages/saros_helfer.yaml, in configuration.yaml
+#   `homeassistant: packages: !include_dir_named packages`, HA neu starten
+# - Oder per UI: Einstellungen → Geräte & Dienste → Helfer → Dropdown, Optionen exakt wie unten (Groß-/Kleinschreibung!)
+# - Entitäts-IDs sind frei wählbar, müssen nur in der Karte eingetragen werden
+input_select:
+  # Merker des Modus-Skripts (mode_helper) — unterscheidet „Saugen & Wischen“ von „Saugen, dann Wischen“
+  saros_reinigungsmodus:
+    name: Saros Reinigungsmodus
+    icon: mdi:robot-vacuum
+    options:
+      - vacuum
+      - vac_and_mop
+      - vac_then_mop
+
+  # Stockwerk vorbereiten (floor_prep) — Karte setzt Starten/Abbrechen, deine Automation den Rest
+  saros_auf_anderes_stockwerk_vorbereiten:
+    name: Saros auf anderes Stockwerk vorbereiten
+    icon: mdi:stairs
+    options:
+      - Bereit
+      - Starten
+      - Läuft
+      - Fertig
+      - Abbrechen
+      - Gesperrt
+
+  # Rückweg zur Station (floor_back) — nur Anzeige, setzt ausschließlich deine Automation
+  saros_anderes_stockwerk_status:
+    name: Saros anderes Stockwerk Status
+    icon: mdi:home-import-outline
+    options:
+      - OK
+      - Muss zur Station
+      - Station Läuft
+      - Kann zurück

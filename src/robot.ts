@@ -10,7 +10,7 @@ export type Anim =
   | "clean" | "mop" | "cleanmop" | "return" | "charge" | "empty" | "wash" | "dry" | "carry_in" | "carry_out" | "pause" | "error" | "map" | "idle" | "offline";
 
 const dots = (xs: number[], y: number, cls: string) => xs.map((x, i) => svg`<circle class=${cls}
-  style="animation-delay:${(i * 0.35).toFixed(2)}s" cx=${x} cy=${y} r=${cls === "dust" ? 1.6 + (i % 2) * 0.7 : 2.2}></circle>`);
+  style="animation-delay:${(i * 0.35).toFixed(2)}s" cx=${x} cy=${y} r=${cls === "dust" ? 1.6 + (i % 2) * 0.7 : cls === "up" ? 1.2 + (i % 3) * 0.5 : 2.2}></circle>`);
 
 // Seitenbürste: drei kurze, gebogene Borstenbündel direkt an der Nabe (0|0), die knapp unterm Gehäuserand sitzt —
 // nur die Borstenspitzen schauen raus. Beim Drehen leicht unscharf + Schleier (Bewegungsunschärfe).
@@ -167,7 +167,8 @@ export const robotStyles = css`
   .ripples circle { fill: none; stroke: var(--rb-water); stroke-width: 1.5; opacity: 0; }
   .beam { fill: var(--rb-accent); opacity: 0; }
   .dust { fill: #8a9097; opacity: 0; }
-  .up { fill: var(--rb-accent); opacity: 0; }
+  /* Staub (grau-braun), nicht Zustandsfarbe — sonst wirkt es wie Wasser */
+  .up { fill: #9a9086; opacity: 0; }
   .heat path { fill: none; stroke: url(#rb-heat); stroke-width: 1.8; stroke-linecap: round; opacity: 0; }
   .drop { fill: var(--rb-water); opacity: 0; }
   .rings circle { fill: none; stroke: var(--rb-accent); stroke-width: 2; opacity: 0; transform-origin: 130px 84px; }
