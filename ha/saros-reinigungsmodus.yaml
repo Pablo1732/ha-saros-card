@@ -1,0 +1,125 @@
+# Skript: Reinigungsmodus des Saros setzen UND prüfen, ob der Roboter ihn übernommen hat.
+# - Modi: vacuum (Saugen) · vac_and_mop (Saugen & Wischen) · vac_then_mop (Saugen, dann Wischen)
+# - „Saugen, dann Wischen“ kann die Roborock-Integration nicht selbst → Rohbefehl app_set_clean_sequence_type
+#   (mitgeschnitten aus der Roborock-App, siehe github.com/Python-roborock/python-roborock/issues/914)
+# - Prüfung: HA kann nur „Wasser aus“ (vacuum) sicher melden. Saugen & Wischen und Saugen, dann Wischen zeigt HA beim
+#   Saros oft beide als unknown → für diese wird nur geprüft, dass Wischen an ist (nicht welcher der beiden)
+# - Klappt es nach 2 Versuchen nicht → Benachrichtigung in HA, Skript endet mit Fehler
+# - Optional: Dropdown-Helfer (input_select) mit Optionen vacuum / vac_and_mop / vac_then_mop als Merker →
+#   Skript trägt den gesetzten Modus ein, die Karte zeigt damit den richtigen Modus statt raten (mode_helper)
+# - Einfügen: Einstellungen → Automationen & Szenen → Skripte → Neu → ⋮ → In YAML bearbeiten → alles ersetzen,
+#   speichern mit Entitäts-ID script.saros_reinigungsmodus. Entitäten unter variables bei Bedarf anpassen.
+# - Karte: mode_script: script.<ID>, optional mode_helper: input_select.<ID>
+alias: Saros – Reinigungsmodus setzen
+description: Setzt den Reinigungsmodus und prüft, ob der Roboter ihn übernommen hat.
+icon: mdi:robot-vacuum
+mode: restart
+fields:
+  modus:
+    name: Modus
+    required: true
+    selector:
+      select:
+        options:
+          - label: Saugen
+            value: vacuum
+          - label: Saugen & Wischen
+            value: vac_and_mop
+          - label: Saugen, dann Wischen
+            value: vac_then_mop
+variables:
+  vac: vacuum.saros_20_flow_complete_2
+  sel: select.saros_20_flow_complete_reinigungsmodus_2
+  mop: select.saros_20_flow_complete_wisch_intensitat_2
+  # Merker (optional, siehe oben); gibt es ihn nicht, wird er übersprungen
+  merker: input_select.saros_reinigungsmodus
+  # Stärken merken — der Rohbefehl setzt Standardwerte
+  fan_vorher: "{{ state_attr(vac, 'fan_speed') }}"
+  mop_vorher: "{{ states(mop) }}"
+sequence:
+  - repeat:
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ modus == 'vac_then_mop' }}"
+          then:
+            - action: vacuum.send_command
+              target:
+                entity_id: "{{ vac }}"
+              data:
+                command: app_set_clean_sequence_type
+                params:
+                  type: 1
+                  fan_power: 102
+                  mop_mode: 300
+                  water_box_mode: 225
+                  repeat: 1
+          else:
+            # Reihenfolge aus, sonst bleibt „erst saugen, dann wischen“ aktiv
+            - action: vacuum.send_command
+              target:
+                entity_id: "{{ vac }}"
+              data:
+                command: app_set_clean_sequence_type
+                params:
+                  type: 0
+                  fan_power: 102
+                  mop_mode: 300
+                  water_box_mode: 200
+            - delay: 1
+            - action: select.select_option
+              target:
+                entity_id: "{{ sel }}"
+              data:
+                option: "{{ modus }}"
+        - delay: 1
+        # Saugstärke zurück (Max+ nur bei reinem Saugen)
+        - if:
+            - condition: template
+              value_template: "{{ fan_vorher not in [none, ''] and (modus == 'vacuum' or fan_vorher != 'max_plus') }}"
+          then:
+            - action: vacuum.set_fan_speed
+              target:
+                entity_id: "{{ vac }}"
+              data:
+                fan_speed: "{{ fan_vorher }}"
+        # Wasserfluss zurück
+        - if:
+            - condition: template
+              value_template: "{{ modus != 'vacuum' and mop_vorher in (state_attr(mop, 'options') or []) and mop_vorher != 'off' }}"
+          then:
+            - action: select.select_option
+              target:
+                entity_id: "{{ mop }}"
+              data:
+                option: "{{ mop_vorher }}"
+        - delay: 2
+        - action: homeassistant.update_entity
+          target:
+            entity_id: "{{ sel }}"
+        - wait_template: >-
+            {{ states(sel) == 'vacuum' if modus == 'vacuum' else states(sel) not in ['vacuum', 'unavailable'] }}
+          timeout: 15
+      until:
+        - condition: template
+          value_template: "{{ wait.completed or repeat.index >= 2 }}"
+  - if:
+      - condition: template
+        value_template: >-
+          {{ not (states(sel) == 'vacuum' if modus == 'vacuum' else states(sel) not in ['vacuum', 'unavailable']) }}
+    then:
+      - action: persistent_notification.create
+        data:
+          title: Saros
+          message: "Reinigungsmodus „{{ modus }}“ wurde nicht übernommen (HA meldet „{{ states(sel) }}“)."
+      - stop: Modus nicht übernommen
+        error: true
+  - if:
+      - condition: template
+        value_template: "{{ modus in (state_attr(merker, 'options') or []) }}"
+    then:
+      - action: input_select.select_option
+        target:
+          entity_id: "{{ merker }}"
+        data:
+          option: "{{ modus }}"

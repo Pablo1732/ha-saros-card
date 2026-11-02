@@ -1,0 +1,21 @@
+{
+  "name": "ha-saros-card",
+  "version": "1.0.0",
+  "description": "Saugroboter-Karte für Home Assistant (Roborock Saros) im Kachel-Stil",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --serve",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@mdi/js": "^7.4.47",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Saros-Karte Testseite</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap">
+  <style>
+    /* HA-Standard-Dark-Theme nachgestellt; ?light → helles Theme */
+    /* Werte aus dem echten Dashboard (Standard-Theme, dunkel) */
+    :root { --primary-background-color:#111111; --card-background-color:#1c1c1c; --primary-text-color:#e1e1e1;
+      --secondary-text-color:#9b9b9b; --divider-color:rgba(225,225,225,.12); --primary-color:#009ac7; --text-primary-color:#fff;
+      --success-color:#43a047; --warning-color:#ffa600; --error-color:#db4437; --state-inactive-color:#9e9e9e; --disabled-color:#464646;
+      --state-vacuum-active-color:#009688; --state-vacuum-error-color:#f44336; --light-blue-color:#03a9f4; }
+    :root.light { --primary-background-color:#fafafa; --card-background-color:#fff; --primary-text-color:#212121;
+      --secondary-text-color:#727272; --divider-color:rgba(0,0,0,.12); }
+    body { margin: 0; background: var(--primary-background-color); font-family: Roboto, "Segoe UI", sans-serif; color: #aaa; }
+    #wrap { padding: 16px; display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+    .bar { font-size: 13px; padding: 12px 16px 0; display: grid; gap: 6px; }
+    .grp { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .grp span { flex-basis: 100%; color: #888; font-size: 12px; margin-top: 4px; }
+    .bar button { font: inherit; padding: 4px 10px; border: 1px solid #444; border-radius: 6px; background: #2a2a2a; color: #ddd; cursor: pointer; }
+    .bar button.on { background: #009ac7; border-color: #009ac7; color: #fff; }
+    :root.light .bar button { background: #eee; color: #222; border-color: #ccc; }
+  </style>
+</head>
+<body>
+  <div class="bar" id="bar"></div>
+  <div id="wrap">
+    <saros-card style="width:380px"></saros-card>
+    <saros-card style="width:300px"></saros-card>
+  </div>
+  <script type="module">
+    if (location.search.includes("light")) document.documentElement.classList.add("light");
+    import "./out/mock.js";
+    import "./out/saros-card.js";
+    const { mock } = window;
+    const back = "input_select.saros_20_flow_complete_anderes_stockwerk_status";
+    const B = mock.B, vac = `vacuum.${B}2`, st = `sensor.${B}status_2`, prep = `input_select.${B}auf_anderes_stockwerk_vorbereiten`;
+    const cards = [...document.querySelectorAll("saros-card")];
+    cards.forEach((c) => c.setConfig({ type: "custom:saros-card", entity: vac, name: "Saros", floor_prep: prep, floor_back: back,
+      ...(location.search.includes("script") ? { mode_script: "script.saros_reinigungsmodus", mode_helper: "input_select.saros_reinigungsmodus" } : {}) }));
+    const push = () => cards.forEach((c) => (c.hass = mock.hass));
+    mock.onChange(push);
+    push();
+    const sel = `select.${B}reinigungsmodus_2`, dry = `sensor.${B}dock_verbleibende_zeit_zum_trocknen_des_mopps_2`;
+    // Grundzustand: jedes Szenario startet von hier, damit nichts vom vorigen hängen bleibt
+    const base = () => {
+      mock.set(vac, "docked"); mock.set(st, "charging"); mock.set(`sensor.${B}batterie_2`, 100); mock.set(dry, 0);
+      mock.set(sel, "vac_and_mop"); mock.set("input_select.saros_reinigungsmodus", "vac_and_mop");
+      mock.set(prep, "Bereit"); mock.set(back, "OK");
+      mock.set(`sensor.${B}staubsauger_fehler_2`, "none"); mock.set(`binary_sensor.${B}dock_schmutzwassertank_2`, "off");
+      mock.set(`sensor.${B}verbleibende_sensorzeit_2`, 18.7); mock.set(`sensor.${B}verbleibende_filterzeit_2`, 144);
+      mock.set(`sensor.${B}aktueller_raum_2`, "Küche"); mock.set(`sensor.${B}reinigungsfortschritt_2`, 42);
+      mock.set(`sensor.${B}reinigungsbereich_2`, 12.4); mock.set(`sensor.${B}reinigungszeit_2`, 23);
+    };
+    const clean = (mode, status) => { mock.set(sel, mode); mock.set(vac, "cleaning"); mock.set(st, status);
+      mock.set("input_select.saros_reinigungsmodus", mode === "unknown" ? "vac_then_mop" : mode); };
+    const G = {
+      "Station": {
+        "Voll geladen": () => {},
+        "Lädt 64 %": () => mock.set(`sensor.${B}batterie_2`, 64),
+        "Leert": () => mock.set(st, "emptying_the_bin"),
+        "Mopp waschen": () => mock.set(st, "washing_the_mop"),
+        "Mopp trocknen": () => mock.set(dry, 1.6),
+      },
+      "Reinigung": {
+        "Saugt": () => clean("vacuum", "cleaning"),
+        "Saugt & wischt": () => clean("vac_and_mop", "clean_mop_cleaning"),
+        "Saugen → Wischen: Saugphase": () => clean("unknown", "segment_cleaning"),
+        "Saugen → Wischen: Wischphase": () => clean("unknown", "segment_mopping"),
+        "Pausiert": () => { mock.set(vac, "paused"); mock.set(st, "paused"); },
+        "Fährt zur Station": () => { mock.set(vac, "returning"); mock.set(st, "returning_home"); },
+      },
+      "Probleme": {
+        "Fehler": () => { mock.set(vac, "error"); mock.set(st, "error"); mock.set(`sensor.${B}staubsauger_fehler_2`, "main_brush_jammed"); },
+        "Tank voll": () => mock.set(`binary_sensor.${B}dock_schmutzwassertank_2`, "on"),
+        "Wartung fällig": () => { mock.set(`sensor.${B}verbleibende_sensorzeit_2`, 1.5); mock.set(`sensor.${B}verbleibende_filterzeit_2`, 0); },
+        "Offline": () => { mock.set(vac, "unavailable"); mock.set(st, "unavailable"); },
+      },
+      "Stockwerk vorbereiten": {
+        "Gesperrt": () => mock.set(prep, "Gesperrt"),
+        "Läuft": () => { mock.set(prep, "Läuft"); mock.set(st, "emptying_the_bin"); },
+        "Fertig": () => { mock.set(prep, "Fertig"); mock.set(vac, "paused"); mock.set(st, "paused"); },
+      },
+      "Rückweg zur Station": {
+        "Muss getragen werden": () => { mock.set(back, "Muss zur Station"); mock.set(vac, "idle"); mock.set(st, "idle"); },
+        // Leeren/Waschen überschreibt die Anzeige automatisch (siehe Gruppe Station)
+        "Station läuft": () => mock.set(back, "Station Läuft"),
+        "Kann zurück": () => mock.set(back, "Kann zurück"),
+      },
+    };
+    const S = {};
+    const bar = document.getElementById("bar");
+    for (const [group, items] of Object.entries(G)) {
+      const row = document.createElement("div"); row.className = "grp";
+      row.innerHTML = `<span>${group}</span>`;
+      for (const [n, fn] of Object.entries(items)) {
+        const b = document.createElement("button"); b.textContent = n;
+        S[n] = () => { base(); fn(); bar.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); };
+        b.onclick = S[n]; row.appendChild(b);
+      }
+      bar.appendChild(row);
+    }
+    window.S = S;
+  </script>
+</body>
+</html>
