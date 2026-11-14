@@ -62,6 +62,7 @@ floor_back: input_select.saros_anderes_stockwerk_status
 | `carry_window` | nein | Minuten, die der Roboter nach „Zur Station tragen“ Zeit hat, bevor deine Automation ihn selbst weitermachen lässt (z. B. `60`); nur für den Hinweis „Noch X Min. Zeit“, ohne Angabe kein Hinweis |
 | `maintenance_warn` | nein | Wartung ab so viel % Restlaufzeit melden (Standard `10`) |
 | `animations` | nein | `false` = keine Animationen |
+| `ignore_reduced_motion` | nein | `true` = Animationen auch bei aktivem „Bewegung reduzieren“ (z. B. iPhone) zeigen; Standard: dann aus |
 | `show_last_clean` | nein | `false` = „Zuletzt gereinigt vor …“ ausblenden (z. B. wenn die Integration falsche Zeiten meldet) |
 | `entities` | nein | Entitäten von Hand zuordnen, falls die Erkennung nicht passt, z. B. `entities: { status: sensor.xyz }` |
 

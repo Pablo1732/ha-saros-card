@@ -256,5 +256,6 @@ export const robotStyles = css`
   @keyframes rb-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 
   .noanim .robot *, .noanim .robot { animation: none !important; }
-  @media (prefers-reduced-motion: reduce) { .robot, .robot * { animation: none !important; } }
+  /* iOS „Bewegung reduzieren“ / System-Einstellung: Animationen aus — außer ignore_reduced_motion: true (Klasse force-anim) */
+  @media (prefers-reduced-motion: reduce) { .card:not(.force-anim) .robot, .card:not(.force-anim) .robot * { animation: none !important; } }
 `;

@@ -51,6 +51,8 @@ export interface SarosConfig {
   modes?: string[];
   /** false = keine Animationen */
   animations?: boolean;
+  /** true = Animationen auch bei aktivem „Bewegung reduzieren“ (iOS) bzw. prefers-reduced-motion zeigen (Standard: aus Rücksicht auf die Einstellung ausgeblendet) */
+  ignore_reduced_motion?: boolean;
   /** „Zuletzt gereinigt vor …“ unter dem Status zeigen (Standard true) */
   show_last_clean?: boolean;
   /** Skript, das den Reinigungsmodus setzt und prüft (ha/saros-reinigungsmodus.yaml); macht „Saugen, dann Wischen“ antippbar */

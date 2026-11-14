@@ -471,7 +471,8 @@ export class SarosCard extends LitElement {
     const anim = this.anim();
     const dark = !!this.hass.themes?.darkMode;
     const noanim = this._config.animations === false;
-    return html`<div class="card ${dark ? "dark" : ""} ${noanim ? "noanim" : ""}" style="--accent:${this.glow(anim)};--rb-accent:${ACCENT[anim]}">
+    const force = this._config.ignore_reduced_motion === true && !noanim;
+    return html`<div class="card ${dark ? "dark" : ""} ${noanim ? "noanim" : ""} ${force ? "force-anim" : ""}" style="--accent:${this.glow(anim)};--rb-accent:${ACCENT[anim]}">
       ${this.renderHero(anim)}
       ${this.renderStatus()}
       ${this.renderControls()}
