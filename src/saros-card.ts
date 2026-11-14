@@ -77,6 +77,8 @@ export class SarosCard extends LitElement {
   private _calmTimer?: number;
   private _pendingAt: Record<string, number> = {};
   private _staleTimer?: number;
+  /** Timer für die Restzeit-Anzeige beim Hinweis „Zur Station tragen“ (siehe carryHint) */
+  private _carryTimer?: number;
   private _lastVac?: string;
   private _pausedFrom?: string;
   private _pausedForPrep = false;
@@ -213,6 +215,7 @@ export class SarosCard extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    clearTimeout(this._carryTimer);
     // Dialoge nicht beim Zurückkehren auf die Ansicht wieder aufpoppen lassen
     this._menu = false;
     this._confirm = undefined;
@@ -603,14 +606,16 @@ export class SarosCard extends LitElement {
       html`<div class="banner ${cls}">${ic}<div><b>${title}</b>${text}</div></div>${this.abortAll()}`;
     // in die Station gestellt bzw. Station-Ablauf läuft → Automation meldet danach „Kann zurück“
     // reinigt er schon wieder (Dropdown hängt noch), normale Knöpfe statt Hinweis
-    const backStep = !CLEAN_STATES.includes(v);
+    // Roboter offline: keine Hand-Hinweise (er lässt sich nicht bedienen); sie kommen zurück, sobald er wieder erreichbar ist
+    const backStep = !CLEAN_STATES.includes(v) && !off;
     if (backStep && (back === BACK.running || (back === BACK.carry && v === "docked"))) {
+      // war es der letzte Abschnitt, ist er danach einfach fertig; sonst kommt der Hinweis zum Zurückbringen
       return backBanner("", html`<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle></svg>`,
-        "Station arbeitet", "Läuft automatisch — danach kommt der Hinweis zum Zurückbringen.");
+        "Station arbeitet", "Läuft automatisch — danach ist er fertig oder es kommt der Hinweis zum Zurückbringen.");
     }
     if (backStep && back === BACK.carry) {
       return backBanner("warn", icon("mdi:hand-back-right"), "Zur Station tragen",
-        "Roboter von Hand in die Station stellen — der Vorgang startet dann automatisch.");
+        `Roboter von Hand in die Station stellen — der Vorgang startet dann automatisch.${this.carryHint()}`);
     }
     if (backStep && back === BACK.done) {
       return backBanner("", icon("mdi:check-circle"), "Station fertig",
@@ -618,11 +623,12 @@ export class SarosCard extends LitElement {
     }
     // Vorbereitung läuft → nur deren Knopf, Start/Pause würden der Automation dazwischenfunken
     if (prepBusy) return html`<div class="actions">${this.prepButton(prep!)}</div>`;
-    // Vorbereitung fertig, Roboter wartet aufs Umstellen → Hinweis + Reinigung abbrechen
-    if (prep === PREP.done && !CLEAN_STATES.includes(v)) {
+    // Vorbereitung fertig, Roboter wartet aufs Umstellen → Hinweis + Reinigung abbrechen;
+    // pausiert er, geht auch „Hier fortsetzen“ (doch auf diesem Stockwerk reinigen, Stockwerk-Wechsel endet)
+    if (prep === PREP.done && !CLEAN_STATES.includes(v) && !off) {
       return html`<div class="banner">${icon("mdi:check-circle")}<div><b>Vorbereitung fertig</b>
         Roboter ins gewünschte Stockwerk stellen und einfach nur die ${icon("mdi:power", "inl")}-Taste drücken.</div></div>
-        ${this.abortAll()}`;
+        ${this.abortAll(v === "paused" ? this.resumeHere() : undefined)}`;
     }
 
     let row: TemplateResult;
@@ -660,9 +666,36 @@ export class SarosCard extends LitElement {
     return html`<button class="btn ${kind}" ?disabled=${disabled} @click=${fn}>${icon(ic)}<span>${text}</span></button>`;
   }
 
+  /**
+   * Restzeit zum Hintragen, falls die Automation den Roboter danach selbst weitermachen lässt (Option carry_window).
+   * Zeit läuft ab dem Wechsel des Rückweg-Dropdowns auf „Muss zur Station“; Anzeige wird halbminütlich aufgefrischt.
+   */
+  private carryHint(): string {
+    clearTimeout(this._carryTimer);
+    const win = this._config.carry_window;
+    if (!(win && win > 0)) return "";
+    const since = Date.parse(this.st("back")?.last_changed ?? "");
+    if (!isFinite(since)) return "";
+    this._carryTimer = window.setTimeout(() => this.requestUpdate(), 30_000);
+    const left = Math.ceil((since + win * 60_000 - Date.now()) / 60_000);
+    return left > 0 ? ` Noch ${left} Min. Zeit, danach macht er selbst weiter.` : " Er macht gleich selbst weiter.";
+  }
+
+  /** „Hier fortsetzen“: Roboter soll doch auf diesem Stockwerk weiterreinigen → Stockwerk-Wechsel beenden, damit die Automation nicht mehr eingreift */
+  private resumeHere() {
+    return this.btn("mdi:play", "Hier fortsetzen", () => this.ask({
+      title: "Hier fortsetzen?",
+      text: "Der Roboter reinigt auf diesem Stockwerk weiter. Der Stockwerk-Wechsel wird beendet.",
+      ok: "Fortsetzen", run: () => {
+        this.setPrep(PREP.cancel);
+        this.vac("start");
+      },
+    }), "primary");
+  }
+
   /** beendet den kompletten Reinigungsvorgang: Roboter stoppt, Stockwerk-/Rückweg-Abläufe werden zurückgesetzt */
-  private abortAll() {
-    return html`<div class="actions">${this.btn("mdi:stop", "Reinigung abbrechen", () => this.ask({
+  private abortAll(extra?: TemplateResult) {
+    return html`<div class="actions">${extra ?? nothing}${this.btn("mdi:stop", "Reinigung abbrechen", () => this.ask({
       title: "Reinigung komplett abbrechen?",
       text: "Die Reinigung wird beendet, Stockwerk-Wechsel und Rückweg werden zurückgesetzt. Der Roboter bleibt, wo er ist.",
       ok: "Abbrechen", danger: true, run: () => {

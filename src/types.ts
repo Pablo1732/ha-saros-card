@@ -40,6 +40,11 @@ export interface SarosConfig {
   floor_prep?: string;
   /** input_select „Anderes Stockwerk Status“ (OK / Muss zur Station / Kann zurück); nur Anzeige, steuert die Automation */
   floor_back?: string;
+  /**
+   * Minuten, die der Roboter nach „Zur Station tragen“ Zeit hat, bevor deine Automation ihn selbst weitermachen lässt.
+   * Nur für den Hinweistext („Noch X Min. Zeit …“); ohne Angabe kein Hinweis.
+   */
+  carry_window?: number;
   /** Wartung ab so viel % Restlaufzeit als fällig melden (Standard 10) */
   maintenance_warn?: number;
   /** angezeigte Modi (Standard vacuum, vac_and_mop, vac_then_mop); z. B. mop ergänzen für Roboter mit „Nur Wischen“ */

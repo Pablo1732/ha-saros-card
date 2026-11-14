@@ -59,6 +59,7 @@ floor_back: input_select.saros_anderes_stockwerk_status
 | `floor_back` | nein | `input_select` für den Rückweg aus dem anderen Stockwerk (nur Anzeige, siehe unten) |
 | `mode_script` | nein | Skript, das den Modus setzt und prüft (siehe unten); macht „Saugen, dann Wischen“ antippbar |
 | `mode_helper` | nein | Merker-Dropdown des Skripts; damit zeigt die Karte die Wisch-Modi richtig an |
+| `carry_window` | nein | Minuten, die der Roboter nach „Zur Station tragen“ Zeit hat, bevor deine Automation ihn selbst weitermachen lässt (z. B. `60`); nur für den Hinweis „Noch X Min. Zeit“, ohne Angabe kein Hinweis |
 | `maintenance_warn` | nein | Wartung ab so viel % Restlaufzeit melden (Standard `10`) |
 | `animations` | nein | `false` = keine Animationen |
 | `show_last_clean` | nein | `false` = „Zuletzt gereinigt vor …“ ausblenden (z. B. wenn die Integration falsche Zeiten meldet) |
@@ -77,11 +78,12 @@ Die Karte stellt nur das `input_select`, den Ablauf macht deine Automation:
 | `Bereit` | „Stockwerk vorbereiten“ | stellt auf `Starten` |
 | `Starten` / `Läuft` | Lade-Kreis | Bestätigung → `Abbrechen` |
 | `Abbrechen` | „Wird abgebrochen…“ | – |
-| `Fertig` | Hinweis: Roboter umstellen, ⏻-Taste drücken (ein Banner) | Bestätigung → `Abbrechen` |
+| `Fertig` | Hinweis: Roboter umstellen, ⏻-Taste drücken (ein Banner); dazu **Hier fortsetzen** (nur wenn pausiert) und **Reinigung abbrechen** | Hier fortsetzen → Vorbereitung `Abbrechen`, Roboter reinigt auf diesem Stockwerk weiter; Reinigung abbrechen → Bestätigung → `Abbrechen` |
 | `Gesperrt` | ausgegraut mit Schloss | – |
 
 - Solange `Starten`/`Läuft`/`Abbrechen` aktiv ist, sind Start/Pause ausgeblendet (würden der Automation dazwischenfunken). Hängt `Abbrechen` über 1 min, gibt die Karte die Knöpfe wieder frei.
-- Pausiert die Vorbereitung den Roboter, fragt „Fortsetzen“ nach (er könnte schon im anderen Stockwerk stehen).
+- Pausiert die Vorbereitung den Roboter, bleibt `Fertig` stehen, solange er im anderen Stockwerk ist. „Hier fortsetzen“ beendet den Stockwerk-Wechsel, damit deine Automation nicht mehr eingreift.
+- Wurde die Vorbereitung zurückgesetzt, während der Roboter noch pausiert, fragt „Fortsetzen“ nach (er könnte schon im anderen Stockwerk stehen).
 
 ### Rückweg zur Station
 Steht der Roboter im anderen Stockwerk, kann er nicht selbst zur Station. Die Karte zeigt nur an, den Ablauf macht deine Automation:
@@ -92,7 +94,7 @@ Steht der Roboter im anderen Stockwerk, kann er nicht selbst zur Station. Die Ka
 | Wert | Karte zeigt |
 |---|---|
 | `OK` | normale Knöpfe |
-| `Muss zur Station` | „Zur Station tragen“ (orange), Animation: Hand setzt Roboter in die Station; steht er schon drin: „Station arbeitet“ |
+| `Muss zur Station` | „Zur Station tragen“ (orange), Animation: Hand setzt Roboter in die Station; steht er schon drin: „Station arbeitet“. Mit `carry_window` dazu „Noch X Min. Zeit, danach macht er selbst weiter“ |
 | `Station Läuft` | „Station arbeitet“; oben je nach Status Leeren / Mopp waschen (sonst allgemein) |
 | `Kann zurück` | „Roboter an die vorherige Stelle bringen, ⏻-Taste drücken“, Animation: Hand nimmt Roboter heraus |
 
