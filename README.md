@@ -83,7 +83,7 @@ Die Karte stellt nur das `input_select`, den Ablauf macht deine Automation:
 | `Gesperrt` | ausgegraut mit Schloss | – |
 
 - Solange `Starten`/`Läuft`/`Abbrechen` aktiv ist, sind Start/Pause ausgeblendet (würden der Automation dazwischenfunken). Hängt `Abbrechen` über 1 min, gibt die Karte die Knöpfe wieder frei.
-- Wartungs-Menü (Zustand-Symbol oben rechts): steht der Roboter mit angefangenem Auftrag (z. B. in der Roborock-App „pausiert“, HA zeigt nur „lädt“), gibt es dort **Auftrag beenden** (`vacuum.stop`).
+- Von Hand ins Dock gestellter Roboter mit offenem Auftrag (Roborock-App: „pausiert“, HA meldet nur „lädt“): die Karte erkennt das am Status-Verlauf (kam aus „pausiert“, nicht von Heimfahrt/Andocken) und zeigt ihn wie jeden pausierten Roboter: **Pausiert**, Fortsetzen, Abbrechen (beendet den Auftrag). Nach einer normal beendeten Reinigung bleibt es beim Ruhezustand.
 - Pausiert die Vorbereitung den Roboter, bleibt `Fertig` stehen, solange er im anderen Stockwerk ist. „Hier fortsetzen“ beendet den Stockwerk-Wechsel, damit deine Automation nicht mehr eingreift.
 - Wurde die Vorbereitung zurückgesetzt, während der Roboter noch pausiert, fragt „Fortsetzen“ nach (er könnte schon im anderen Stockwerk stehen).
 

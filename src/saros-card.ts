@@ -11,6 +11,8 @@ import { cardStyles } from "./styles";
 
 const BAD = ["unknown", "unavailable", ""];
 const CLEAN_STATES = ["cleaning", "returning"];
+/** Roboter steht im Dock: lädt oder die Station arbeitet (Leeren, Waschen, Mopp an-/abbauen) */
+const DOCK_IDLE_OR_WORK = ["charging", "charging_complete", "emptying_the_bin", "washing_the_mop", "attaching_the_mop", "detaching_the_mop", "air_drying_stopping"];
 
 interface Issue { level: "error" | "warn"; text: string; icon: string }
 interface Confirm { title: string; text: string; ok: string; danger?: boolean; info?: boolean; run: () => void }
@@ -79,6 +81,9 @@ export class SarosCard extends LitElement {
   private _staleTimer?: number;
   /** Timer für die Restzeit-Anzeige beim Hinweis „Zur Station tragen“ (siehe carryHint) */
   private _carryTimer?: number;
+  /** Auftrag im Dock offen? (Ergebnis je Status-Wechsel, siehe pendingJob) */
+  private _pend?: { key: string; val: boolean };
+  private _pendBusy?: string;
   private _lastVac?: string;
   private _pausedFrom?: string;
   private _pausedForPrep = false;
@@ -317,7 +322,7 @@ export class SarosCard extends LitElement {
     // Roboter muss von Hand getragen werden (Stockwerk-Wechsel)
     const c = this.carry();
     if (c) return c === "to_dock" ? "carry_in" : "carry_out";
-    if (v === "paused") return "pause";
+    if (v === "paused" || this.pendingJob()) return "pause";
     if (v === "cleaning") {
       // Phase aus dem Status ist genauer als der Modus (bei „Saugen, dann Wischen“: erst Saug-, dann Wischphase)
       if (s.includes("clean_mop_cleaning")) return "cleanmop";
@@ -353,6 +358,7 @@ export class SarosCard extends LitElement {
     if (!v || v === "unavailable") return "Nicht erreichbar";
     const c = this.carry();
     if (c) return { to_dock: "Muss zur Station", back: "Bereit zum Zurückbringen", floor: "Bereit fürs andere Stockwerk" }[c];
+    if ((s === "charging" || s === "charging_complete") && this.pendingJob()) return "Pausiert";
     if (this.drying() && !CLEAN_STATES.includes(v) && v !== "paused" && v !== "error") return "Mopp trocknet";
     // Station-Ablauf nach dem Rückweg: Leeren/Waschen zeigt der Status selbst, sonst allgemein
     if (this.val("back") === BACK.running && !["emptying_the_bin", "washing_the_mop", "drying"].includes(s ?? "")) return "Station arbeitet";
@@ -515,7 +521,7 @@ export class SarosCard extends LitElement {
 
   private renderStatus() {
     const v = this.st("vacuum")?.state ?? "";
-    const running = CLEAN_STATES.includes(v) || v === "paused";
+    const running = CLEAN_STATES.includes(v) || v === "paused" || this.pendingJob();
     const parts: string[] = [];
     let progress: number | undefined;
     if (running) {
@@ -599,6 +605,8 @@ export class SarosCard extends LitElement {
     const cancelStuck = prep === PREP.cancel && Date.now() - Date.parse(this.st("prep")?.last_changed ?? "") > 60_000;
     const prepBusy = prep === PREP.start || prep === PREP.running || (prep === PREP.cancel && !cancelStuck);
     const cleaning = v === "cleaning";
+    // angefangener Auftrag im Dock (siehe pendingJob): wie „pausiert“ bedienen
+    const pending = v !== "paused" && this.pendingJob();
 
     // Rückweg aus dem anderen Stockwerk: Roboter muss getragen werden, Ablauf macht die Automation → nur Hinweis
     const back = this.val("back");
@@ -640,7 +648,7 @@ export class SarosCard extends LitElement {
           title: "Reinigung abbrechen?", text: "Der Roboter beendet die Reinigung und fährt zurück zur Station.",
           ok: "Abbrechen", danger: true, run: () => this.vac("return_to_base"),
         }), "danger") : nothing}`;
-    } else if (v === "paused") {
+    } else if (v === "paused" || pending) {
       // Pause kam von der Stockwerk-Vorbereitung → Roboter steht evtl. im falschen Stockwerk
       const resume = this._pausedForPrep ? () => this.ask({
         title: "Hier fortsetzen?", text: "Der Roboter wurde für ein anderes Stockwerk vorbereitet. Trotzdem hier weiterreinigen?",
@@ -652,8 +660,8 @@ export class SarosCard extends LitElement {
       row = html`
         ${this.btn("mdi:play", "Fortsetzen", resume, "primary")}
         ${this.btn("mdi:stop", "Abbrechen", () => this.ask({
-          title: "Reinigung abbrechen?", text: "Der Roboter beendet die Reinigung und fährt zurück zur Station.",
-          ok: "Abbrechen", danger: true, run: () => this.vac("return_to_base"),
+          title: "Reinigung abbrechen?", text: pending ? "Der Roboter beendet die Reinigung." : "Der Roboter beendet die Reinigung und fährt zurück zur Station.",
+          ok: "Abbrechen", danger: true, run: () => this.vac(pending ? "stop" : "return_to_base"),
         }), "danger")}`;
     } else {
       row = html`
@@ -665,6 +673,36 @@ export class SarosCard extends LitElement {
 
   private btn(ic: string, text: string, fn: () => void, kind: string, disabled = false) {
     return html`<button class="btn ${kind}" ?disabled=${disabled} @click=${fn}>${icon(ic)}<span>${text}</span></button>`;
+  }
+
+  /**
+   * Roboter steht geladen im Dock, „Reinigen“ ist an und er kam aus „pausiert“ (von Hand ins Dock gestellt, z. B. beim
+   * Stockwerk-Wechsel): in der Roborock-App „pausiert“, HA meldet nur „lädt“ → Karte zeigt ihn wie jeden pausierten Roboter.
+   * Kam er von Heimfahrt/Andocken (normal fertig), bleibt es beim normalen Ruhezustand. Entscheidung aus dem Status-Verlauf.
+   */
+  private pendingJob(): boolean {
+    if (this.st("vacuum")?.state !== "docked" || this.val("in_cleaning") !== "on") return false;
+    const ent = this.st("status");
+    // lädt oder die Station arbeitet gerade (leeren/waschen/trocknen): der Auftrag bleibt offen
+    if (!ent || !DOCK_IDLE_OR_WORK.includes(ent.state)) return false;
+    const key = ent.last_changed;
+    if (this._pend?.key !== key && this._pendBusy !== key) this.fetchPending(ent.entity_id, key);
+    return this._pend?.key === key ? this._pend.val : (this._pend?.val ?? false);
+  }
+
+  private fetchPending(id: string, key: string): void {
+    if (!this.hass?.callWS) return;
+    this._pendBusy = key;
+    const skip = ["charging", "charging_complete", "washing_the_mop", "emptying_the_bin", "attaching_the_mop", "detaching_the_mop", "air_drying_stopping", "unknown", "unavailable"];
+    this.hass.callWS<Record<string, { s: string }[]>>({
+      type: "history/history_during_period", entity_ids: [id], minimal_response: true, no_attributes: true,
+      start_time: new Date(Date.now() - 12 * 3_600_000).toISOString(),
+    }).then((r) => {
+      // letzter Zustand vor dem Laden, der kein Dock-Vorgang war: „pausiert“ = von Hand gestellt
+      const last = (r[id] ?? []).map((x) => x.s).reverse().find((x) => !skip.includes(x));
+      this._pend = { key, val: last === "paused" };
+      this.requestUpdate();
+    }).catch(() => { this._pend = { key, val: false }; }).finally(() => { if (this._pendBusy === key) this._pendBusy = undefined; });
   }
 
   /**
@@ -750,10 +788,6 @@ export class SarosCard extends LitElement {
     const ve = this.val("vacuum_error");
     const de = this.val("dock_error");
     const dry = this.numVal("mop_drying_remaining_time");
-    // „Reinigen“ ist an, der Roboter steht aber: angefangener Auftrag (z. B. in der Roborock-App „pausiert“),
-    // den die Karte sonst nicht sieht (HA meldet nur „lädt“) → hier beenden können
-    const vNow = this.st("vacuum")?.state ?? "";
-    const openJob = this.val("in_cleaning") === "on" && !!vNow && vNow !== "unavailable" && !CLEAN_STATES.includes(vNow) && vNow !== "paused";
     const total = [
       this.numVal("total_cleaning_count") != null ? row("mdi:counter", "Reinigungen", num(this.numVal("total_cleaning_count"))) : nothing,
       this.numVal("total_cleaning_area") != null ? row("mdi:ruler-square", "Gereinigte Fläche", `${num(this.numVal("total_cleaning_area"))} m²`) : nothing,
@@ -802,11 +836,6 @@ export class SarosCard extends LitElement {
 
         <div class="dlg-foot">
           <button class="btn sec" @click=${() => this.vac("locate")}>${icon("mdi:map-marker-radius")}<span>Roboter finden</span></button>
-          ${openJob ? html`<button class="btn sec" @click=${() => this.ask({
-            title: "Offenen Reinigungsauftrag beenden?",
-            text: "Der Roboter hat noch einen angefangenen Auftrag (in der Roborock-App z. B. „pausiert“). Er wird beendet, der Roboter bleibt, wo er ist.",
-            ok: "Beenden", danger: true, run: () => this.vac("stop"),
-          })}>${icon("mdi:stop")}<span>Auftrag beenden</span></button>` : nothing}
         </div>
         </div>
       </div>
