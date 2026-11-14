@@ -60,6 +60,7 @@ floor_back: input_select.saros_anderes_stockwerk_status
 | `mode_script` | nein | Skript, das den Modus setzt und prüft (siehe unten); macht „Saugen, dann Wischen“ antippbar |
 | `mode_helper` | nein | Merker-Dropdown des Skripts; damit zeigt die Karte die Wisch-Modi richtig an |
 | `carry_window` | nein | Minuten, die der Roboter nach „Zur Station tragen“ Zeit hat, bevor deine Automation ihn selbst weitermachen lässt (z. B. `60`); nur für den Hinweis „Noch X Min. Zeit“, ohne Angabe kein Hinweis |
+| `pause_timeout` | nein | Minuten, die ein von Hand ins Dock gestellter Roboter nach dem Pausieren als „pausiert“ angezeigt wird (Roborock bricht eine Pause nach ca. 1 Std. selbst ab; Standard `65`, `0` = ohne Ablauf) |
 | `maintenance_warn` | nein | Wartung ab so viel % Restlaufzeit melden (Standard `10`) |
 | `animations` | nein | `false` = keine Animationen |
 | `ignore_reduced_motion` | nein | `true` = Animationen auch bei aktivem „Bewegung reduzieren“ (z. B. iPhone) zeigen; Standard: dann aus |

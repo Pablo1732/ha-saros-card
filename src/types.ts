@@ -45,6 +45,8 @@ export interface SarosConfig {
    * Nur für den Hinweistext („Noch X Min. Zeit …“); ohne Angabe kein Hinweis.
    */
   carry_window?: number;
+  /** Minuten nach dem Pausieren, in denen ein von Hand ins Dock gestellter Roboter als „pausiert“ gilt (Roborock bricht nach ca. 1 Std. ab; Standard 65, 0 = ohne Ablauf) */
+  pause_timeout?: number;
   /** Wartung ab so viel % Restlaufzeit als fällig melden (Standard 10) */
   maintenance_warn?: number;
   /** angezeigte Modi (Standard vacuum, vac_and_mop, vac_then_mop); z. B. mop ergänzen für Roboter mit „Nur Wischen“ */

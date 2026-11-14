@@ -82,7 +82,8 @@ export class SarosCard extends LitElement {
   /** Timer für die Restzeit-Anzeige beim Hinweis „Zur Station tragen“ (siehe carryHint) */
   private _carryTimer?: number;
   /** Auftrag im Dock offen? (Ergebnis je Status-Wechsel, siehe pendingJob) */
-  private _pend?: { key: string; val: boolean };
+  private _pend?: { key: string; val: boolean; until: number };
+  private _pendTimer?: number;
   private _pendBusy?: string;
   private _lastVac?: string;
   private _pausedFrom?: string;
@@ -221,6 +222,7 @@ export class SarosCard extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     clearTimeout(this._carryTimer);
+    clearTimeout(this._pendTimer);
     // Dialoge nicht beim Zurückkehren auf die Ansicht wieder aufpoppen lassen
     this._menu = false;
     this._confirm = undefined;
@@ -687,7 +689,13 @@ export class SarosCard extends LitElement {
     if (!ent || !DOCK_IDLE_OR_WORK.includes(ent.state)) return false;
     const key = ent.last_changed;
     if (this._pend?.key !== key && this._pendBusy !== key) this.fetchPending(ent.entity_id, key);
-    return this._pend?.key === key ? this._pend.val : (this._pend?.val ?? false);
+    const p = this._pend;
+    if (!p?.val) return false;
+    // Roborock bricht eine Pause nach etwa einer Stunde selbst ab → danach nicht mehr „pausiert“ anzeigen
+    if (Date.now() >= p.until) return false;
+    clearTimeout(this._pendTimer);
+    this._pendTimer = window.setTimeout(() => this.requestUpdate(), p.until - Date.now() + 500);
+    return true;
   }
 
   private fetchPending(id: string, key: string): void {
@@ -695,15 +703,18 @@ export class SarosCard extends LitElement {
     this._pendBusy = key;
     // Dock-Vorgänge (auch das „docking“ nach dem Waschen) zählen nicht: gesucht ist, was der Roboter davor tat
     const skip = ["charging", "charging_complete", "washing_the_mop", "emptying_the_bin", "attaching_the_mop", "detaching_the_mop", "air_drying_stopping", "docking", "unknown", "unavailable"];
-    this.hass.callWS<Record<string, { s: string }[]>>({
+    this.hass.callWS<Record<string, { s: string; lu?: number; lc?: number }[]>>({
       type: "history/history_during_period", entity_ids: [id], minimal_response: true, no_attributes: true,
       start_time: new Date(Date.now() - 48 * 3_600_000).toISOString(),
     }).then((r) => {
       // letzter Zustand vor dem Laden, der kein Dock-Vorgang war: „pausiert“ = von Hand gestellt
-      const last = (r[id] ?? []).map((x) => x.s).reverse().find((x) => !skip.includes(x));
-      this._pend = { key, val: last === "paused" };
+      const last = (r[id] ?? []).slice().reverse().find((x) => !skip.includes(x.s));
+      const since = ((last?.lu ?? last?.lc) ?? 0) * 1000;
+      // Ablauf: pause_timeout Minuten nach dem Pausieren (Standard 65; 0 = nie)
+      const mins = this._config.pause_timeout ?? 65;
+      this._pend = { key, val: last?.s === "paused", until: mins > 0 && since ? since + mins * 60_000 : Infinity };
       this.requestUpdate();
-    }).catch(() => { this._pend = { key, val: false }; }).finally(() => { if (this._pendBusy === key) this._pendBusy = undefined; });
+    }).catch(() => { this._pend = { key, val: false, until: 0 }; }).finally(() => { if (this._pendBusy === key) this._pendBusy = undefined; });
   }
 
   /**
