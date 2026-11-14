@@ -693,10 +693,11 @@ export class SarosCard extends LitElement {
   private fetchPending(id: string, key: string): void {
     if (!this.hass?.callWS) return;
     this._pendBusy = key;
-    const skip = ["charging", "charging_complete", "washing_the_mop", "emptying_the_bin", "attaching_the_mop", "detaching_the_mop", "air_drying_stopping", "unknown", "unavailable"];
+    // Dock-Vorgänge (auch das „docking“ nach dem Waschen) zählen nicht: gesucht ist, was der Roboter davor tat
+    const skip = ["charging", "charging_complete", "washing_the_mop", "emptying_the_bin", "attaching_the_mop", "detaching_the_mop", "air_drying_stopping", "docking", "unknown", "unavailable"];
     this.hass.callWS<Record<string, { s: string }[]>>({
       type: "history/history_during_period", entity_ids: [id], minimal_response: true, no_attributes: true,
-      start_time: new Date(Date.now() - 12 * 3_600_000).toISOString(),
+      start_time: new Date(Date.now() - 48 * 3_600_000).toISOString(),
     }).then((r) => {
       // letzter Zustand vor dem Laden, der kein Dock-Vorgang war: „pausiert“ = von Hand gestellt
       const last = (r[id] ?? []).map((x) => x.s).reverse().find((x) => !skip.includes(x));
