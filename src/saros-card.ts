@@ -750,6 +750,10 @@ export class SarosCard extends LitElement {
     const ve = this.val("vacuum_error");
     const de = this.val("dock_error");
     const dry = this.numVal("mop_drying_remaining_time");
+    // „Reinigen“ ist an, der Roboter steht aber: angefangener Auftrag (z. B. in der Roborock-App „pausiert“),
+    // den die Karte sonst nicht sieht (HA meldet nur „lädt“) → hier beenden können
+    const vNow = this.st("vacuum")?.state ?? "";
+    const openJob = this.val("in_cleaning") === "on" && !!vNow && vNow !== "unavailable" && !CLEAN_STATES.includes(vNow) && vNow !== "paused";
     const total = [
       this.numVal("total_cleaning_count") != null ? row("mdi:counter", "Reinigungen", num(this.numVal("total_cleaning_count"))) : nothing,
       this.numVal("total_cleaning_area") != null ? row("mdi:ruler-square", "Gereinigte Fläche", `${num(this.numVal("total_cleaning_area"))} m²`) : nothing,
@@ -798,6 +802,11 @@ export class SarosCard extends LitElement {
 
         <div class="dlg-foot">
           <button class="btn sec" @click=${() => this.vac("locate")}>${icon("mdi:map-marker-radius")}<span>Roboter finden</span></button>
+          ${openJob ? html`<button class="btn sec" @click=${() => this.ask({
+            title: "Offenen Reinigungsauftrag beenden?",
+            text: "Der Roboter hat noch einen angefangenen Auftrag (in der Roborock-App z. B. „pausiert“). Er wird beendet, der Roboter bleibt, wo er ist.",
+            ok: "Beenden", danger: true, run: () => this.vac("stop"),
+          })}>${icon("mdi:stop")}<span>Auftrag beenden</span></button>` : nothing}
         </div>
         </div>
       </div>
