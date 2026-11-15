@@ -140,7 +140,9 @@ var C1=globalThis,H1=C1.ShadowRoot&&(C1.ShadyCSS===void 0||C1.ShadyCSS.nativeSha
   .up { fill: #9a9086; opacity: 0; }
   .heat path { fill: none; stroke: url(#rb-heat); stroke-width: 1.8; stroke-linecap: round; opacity: 0; }
   .drop { fill: var(--rb-water); opacity: 0; }
-  .rings circle { fill: none; stroke: var(--rb-accent); stroke-width: 2; opacity: 0; transform-origin: 130px 84px; }
+  .rings circle { fill: none; stroke: var(--rb-accent); stroke-width: 2; opacity: 0;
+    /* Mitte des Rings selbst (= Roboter-Mitte), unabhängig davon, wie der Browser px-Ursprünge in SVG auslegt */
+    transform-box: fill-box; transform-origin: center; }
   .badge { opacity: 0; transition: opacity 0.3s; }
   .badge circle { fill: var(--rb-accent); }
   .badge path { fill: #fff; display: none; }
@@ -493,4 +495,4 @@ var C1=globalThis,H1=C1.ShadowRoot&&(C1.ShadyCSS===void 0||C1.ShadyCSS.nativeSha
           <button class="btn ${C.danger?"danger":"primary"}" @click=${()=>{this.close("#confirm"),C.run()}}>${C.ok}</button>
         </div>
       </div>
-    </dialog>`:p}};E.properties={hass:{attribute:!1},_config:{state:!0},_menu:{state:!0},_confirm:{state:!0},_pending:{state:!0},_lastMop:{state:!0}},E.styles=a5;customElements.get("saros-card")||customElements.define("saros-card",E);var e1=window;e1.customCards=e1.customCards||[];e1.customCards.some(e=>e.type==="saros-card")||e1.customCards.push({type:"saros-card",name:"Saros-Karte",description:"Saugroboter steuern: Modus, St\xE4rke, Stockwerk vorbereiten, Wartung",preview:!1});console.info("%c SAROS-CARD %c 1.0.0 (2026-11-15 12:26 UTC) ","background:#009688;color:#fff;border-radius:3px 0 0 3px","background:#555;color:#fff;border-radius:0 3px 3px 0");
+    </dialog>`:p}};E.properties={hass:{attribute:!1},_config:{state:!0},_menu:{state:!0},_confirm:{state:!0},_pending:{state:!0},_lastMop:{state:!0}},E.styles=a5;customElements.get("saros-card")||customElements.define("saros-card",E);var e1=window;e1.customCards=e1.customCards||[];e1.customCards.some(e=>e.type==="saros-card")||e1.customCards.push({type:"saros-card",name:"Saros-Karte",description:"Saugroboter steuern: Modus, St\xE4rke, Stockwerk vorbereiten, Wartung",preview:!1});console.info("%c SAROS-CARD %c 1.0.0 (2026-11-15 12:32 UTC) ","background:#009688;color:#fff;border-radius:3px 0 0 3px","background:#555;color:#fff;border-radius:0 3px 3px 0");

@@ -171,7 +171,9 @@ export const robotStyles = css`
   .up { fill: #9a9086; opacity: 0; }
   .heat path { fill: none; stroke: url(#rb-heat); stroke-width: 1.8; stroke-linecap: round; opacity: 0; }
   .drop { fill: var(--rb-water); opacity: 0; }
-  .rings circle { fill: none; stroke: var(--rb-accent); stroke-width: 2; opacity: 0; transform-origin: 130px 84px; }
+  .rings circle { fill: none; stroke: var(--rb-accent); stroke-width: 2; opacity: 0;
+    /* Mitte des Rings selbst (= Roboter-Mitte), unabhängig davon, wie der Browser px-Ursprünge in SVG auslegt */
+    transform-box: fill-box; transform-origin: center; }
   .badge { opacity: 0; transition: opacity 0.3s; }
   .badge circle { fill: var(--rb-accent); }
   .badge path { fill: #fff; display: none; }
