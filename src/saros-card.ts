@@ -84,6 +84,8 @@ export class SarosCard extends LitElement {
   /** Auftrag im Dock offen? (Ergebnis je Status-Wechsel, siehe pendingJob) */
   private _pend?: { key: string; val: boolean; until: number };
   private _pendTimer?: number;
+  /** Akku zu leer zum Weitermachen: ab unter 15 % bis wieder 35 % geladen sind */
+  private _lowBat = false;
   private _pendBusy?: string;
   private _lastVac?: string;
   private _pausedFrom?: string;
@@ -349,6 +351,15 @@ export class SarosCard extends LitElement {
     return undefined;
   }
 
+  /** Zum Weitermachen nach dem Hintragen zu wenig Akku (Hysterese: unter 15 % → erst wieder ab 35 %) */
+  private lowBattery(): boolean {
+    const b = this.numVal("battery");
+    if (b == null) return false;
+    if (b < 15) this._lowBat = true;
+    else if (b >= 35) this._lowBat = false;
+    return this._lowBat;
+  }
+
   /** Station trocknet den Mopp (Restzeit läuft) */
   private drying(): boolean {
     return (this.numVal("mop_drying_remaining_time") ?? 0) > 0;
@@ -359,6 +370,7 @@ export class SarosCard extends LitElement {
     const s = this.val("status");
     if (!v || v === "unavailable") return "Nicht erreichbar";
     const c = this.carry();
+    if (c === "back" && this.lowBattery()) return "Lädt (bis 35 %)";
     if (c) return { to_dock: "Muss zur Station", back: "Bereit zum Zurückbringen", floor: "Bereit fürs andere Stockwerk" }[c];
     if ((s === "charging" || s === "charging_complete") && this.pendingJob()) return "Pausiert";
     if (this.drying() && !CLEAN_STATES.includes(v) && v !== "paused" && v !== "error") return "Mopp trocknet";
@@ -627,6 +639,10 @@ export class SarosCard extends LitElement {
     if (backStep && back === BACK.carry) {
       return backBanner("warn", icon("mdi:hand-back-right"), "Zur Station tragen",
         `Roboter von Hand in die Station stellen — der Vorgang startet dann automatisch.${this.carryHint()}`);
+    }
+    if (backStep && back === BACK.done && this.lowBattery()) {
+      return backBanner("warn", icon("mdi:battery-charging-20"), "Erst laden",
+        `Akku bei ${Math.round(this.numVal("battery") ?? 0)} % — er muss auf 35 % geladen sein, bevor er weitermacht.`);
     }
     if (backStep && back === BACK.done) {
       return backBanner("", icon("mdi:check-circle"), "Station fertig",
