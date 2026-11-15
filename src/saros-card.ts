@@ -326,6 +326,7 @@ export class SarosCard extends LitElement {
     // Roboter muss von Hand getragen werden (Stockwerk-Wechsel)
     const c = this.carry();
     // Akku zu leer zum Weitermachen: erst Lade-Animation, die Hand-Animation kommt nach dem Laden
+    if (c !== "back") this._lowBat = false;  // alter Wert soll beim nächsten Rückweg nicht nachwirken
     if (c === "back" && this.lowBattery()) return "charge";
     if (c) return c === "to_dock" ? "carry_in" : "carry_out";
     if (v === "paused" || this.pendingJob()) return "pause";
