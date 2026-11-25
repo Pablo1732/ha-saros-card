@@ -348,6 +348,8 @@ export class SarosCard extends LitElement {
     const v = this.st("vacuum")?.state ?? "";
     if (CLEAN_STATES.includes(v)) return undefined;
     const back = this.val("back");
+    // Station arbeitet gerade (in die Station gestellt): kein Trage-Hinweis, auch wenn „Vorbereiten“ noch auf „Fertig“ steht
+    if (back === BACK.running || (back === BACK.carry && v === "docked")) return undefined;
     if (back === BACK.carry && v !== "docked") return "to_dock";
     if (back === BACK.done) return "back";
     if (this.val("prep") === PREP.done) return "floor";
